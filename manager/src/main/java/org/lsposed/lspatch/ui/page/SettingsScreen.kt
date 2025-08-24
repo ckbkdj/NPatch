@@ -60,6 +60,7 @@ fun SettingsScreen() {
         ) {
             KeyStore()
             DetailPatchLogs()
+            LanguageSelection()
             StorageDirectory()
             InstallActivity()
         }
@@ -302,6 +303,19 @@ private fun InstallActivity() {
                 PackageManager.DONT_KILL_APP
             )
             enabled = !enabled
+        }
+    )
+}
+
+@Composable
+private fun LanguageSelection() {
+    val context = LocalContext.current
+    SettingsItem(
+        title = stringResource(R.string.settings_language),
+        desc = Locale.getDefault().displayLanguage,
+        icon = Icons.Outlined.BugReport, // 待绘制，先应付下
+        modifier = Modifier.clickable {
+            context.startActivity(Intent(context, org.lsposed.lspatch.ui.activity.LanguageActivity::class.java))
         }
     )
 }
