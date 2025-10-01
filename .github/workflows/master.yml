@@ -21,33 +21,33 @@ jobs:
         submodules: recursive
         fetch-depth: 0
 
-    - name: Cache Gradle
-      uses: actions/cache@v4
+    - name: Cache Dependencies (Gradle, Maven, ccache)
+      uses: actions/cache/restore@v4
       with:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          ~/.m2/repository
+          ~/.ccache
+        key: ${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}-${{ hashFiles('**/build.gradle*') }}-${{ hashFiles('**/src/**/*.cpp', '**/src/**/*.h', '**/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-gradle-
+          ${{ runner.os }}-
 
-    - name: Cache Maven local repo
-      uses: actions/cache@v4
+    - name: Setup Java and Gradle
+      uses: gradle/actions/setup-gradle@v4
       with:
-        path: ~/.m2/repository
-        key: ${{ runner.os }}-m2-${{ hashFiles('**/build.gradle*') }}
-        restore-keys: |
-          ${{ runner.os }}-m2-
+        java-version: '21'
+        distribution: 'adopt'
 
-    - name: Cache ccache
-      uses: actions/cache@v4
+    - name: Setup Ninja
+      uses: seanmiddleditch/gha-setup-ninja@master
       with:
-        path: ~/.ccache
-        key: ${{ runner.os }}-ccache-${{ hashFiles('**/src/**/*.cpp', '**/src/**/*.h', '**/CMakeLists.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-ccache-
+        version: 1.12.0
 
-    - name: Write signing key if needed
+    - name: Remove Android's cmake
+      run: rm -rf $ANDROID_HOME/cmake
+
+    - name: Write Signing Key if needed
       if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
       run: |
         if [ ! -z "${{ secrets.KEY_STORE }}" ]; then
@@ -71,27 +71,7 @@ jobs:
         repository: libxposed/service
         path: libxposed/service
 
-    - name: Setup Java
-      uses: actions/setup-java@v4
-      with:
-        java-version: '21'
-        distribution: 'adopt'
-
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
-
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-
-    - name: Setup ninja
-      uses: seanmiddleditch/gha-setup-ninja@master
-      with:
-        version: 1.12.0
-
-    - name: Remove Android's cmake
-      run: rm -rf $ANDROID_HOME/cmake
-
-    - name: Build local dependencies
+    - name: Build Local Dependencies
       run: |
         echo "--- Building API dependency ---"
         cd libxposed/api
@@ -109,6 +89,18 @@ jobs:
         echo 'org.gradle.jvmargs=-Xmx3g' >> gradle.properties
         echo 'android.native.buildOutput=verbose' >> gradle.properties
         ./gradlew buildAll
+
+    - name: Save Cache
+      uses: actions/cache/save@v4
+      if: always()
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          ~/.m2/repository
+          ~/.ccache
+        key: ${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}-${{ hashFiles('**/build.gradle*') }}-${{ hashFiles('**/src/**/*.cpp', '**/src/**/*.h', '**/CMakeLists.txt') }}
+
 
     - name: Upload Debug artifact
       uses: actions/upload-artifact@v4

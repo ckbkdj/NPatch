@@ -1,11 +1,16 @@
 import java.util.Locale
+import org.gradle.api.tasks.Copy
 
 plugins {
     alias(libs.plugins.agp.app)
 }
 
 android {
-    defaultConfig {
+    defaultConfig {    val copyDexTask = tasks.register<Copy>("copyDex$variantCapped") {
+        dependsOn(variant.assembleTask)
+        from(
+            layout.buildDirectory.file("intermediates/dex/${variant.name}/mergeDex$variantCapped/classes.dex")
+        )
         multiDexEnabled = false
     }
 
@@ -28,35 +33,45 @@ android {
     namespace = "org.lsposed.lspatch.loader"
 }
 
+// Use tasks.named() to get a provider for the assemble task
+val assembleTaskProvider = androidComponents.selector().all().withBuildType("release").map {
+    tasks.named("assembleRelease")
+}
+
 androidComponents.onVariants { variant ->
     val variantCapped = variant.name.replaceFirstChar { it.uppercase() }
+    val projectDir = rootProject.layout.projectDirectory
 
-    task<Copy>("copyDex$variantCapped") {
-        dependsOn("assemble$variantCapped")
-        from("$buildDir/intermediates/dex/${variant.name}/mergeDex$variantCapped/classes.dex")
+    val copyDexTask = tasks.register<Copy>("copyDex$variantCapped") {
+        dependsOn(variant.assembleTask)
+        from(
+            layout.buildDirectory.file("intermediates/dex/${variant.name}/mergeDex$variantCapped/classes.dex")
+        )
         rename("classes.dex", "loader.dex")
-        into("${rootProject.projectDir}/out/assets/${variant.name}/lspatch")
+
+        into(projectDir.dir("out/assets/${variant.name}/lspatch"))
     }
 
-    task<Copy>("copySo$variantCapped") {
-        dependsOn("assemble$variantCapped")
+    val copySoTask = tasks.register<Copy>("copySo$variantCapped") {
+        dependsOn(variant.assembleTask)
         dependsOn("strip${variantCapped}DebugSymbols")
-        val libDir = variant.name + "/strip${variantCapped}DebugSymbols"
+
+        val strippedLibsDir = layout.buildDirectory.dir("intermediates/stripped_native_libs/${variant.name}/strip${variantCapped}DebugSymbols/out/lib")
         from(
             fileTree(
-                "dir" to "$buildDir/intermediates/stripped_native_libs/${variant.name}/strip${variantCapped}DebugSymbols/out/lib",
+                "dir" to strippedLibsDir,
                 "include" to listOf("**/liblspatch.so")
             )
         )
-        into("${rootProject.projectDir}/out/assets/${variant.name}/lspatch/so")
+        into(projectDir.dir("out/assets/${variant.name}/lspatch/so"))
     }
 
-    task("copy$variantCapped") {
-        dependsOn("copySo$variantCapped")
-        dependsOn("copyDex$variantCapped")
+    tasks.register("copy$variantCapped") {
+        dependsOn(copySoTask)
+        dependsOn(copyDexTask)
 
         doLast {
-            println("Dex and so files has been copied to ${rootProject.projectDir}${File.separator}out")
+            println("Dex and so files has been copied to ${projectDir.asFile}${File.separator}out")
         }
     }
 }
